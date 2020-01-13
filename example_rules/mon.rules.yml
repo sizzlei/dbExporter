@@ -1,0 +1,124 @@
+groups:
+- name: alert.rules
+  rules:
+  # Shared
+  - alert: InstanceDown
+    expr: up == 0
+    for: 30s
+    labels:
+      severity: "Critical"
+    annotations:
+      summary: "Endpoint {{ $labels.alias }} [{{ $labels.instance }}] down"
+      description: "{{ $labels.alias }} Exporter or OS System Down."
+      value: "{{ $value }}"
+
+  # Database
+  - alert: DatabaseDown
+    expr: mysql_up  == 0
+    for: 30s
+    labels:
+      severity: "Critical"
+    annotations:
+      summary: "{{ $labels.alias }} [{{ $labels.instance }}] Database down"
+      description: "{{ $labels.alias }} Database Daemon down."
+      value: "{{ $value }}"
+
+  - alert: ConnectionUsage
+    expr: ((mysql_global_status_threads_connected{srvDiv="DATABASE"} / mysql_global_variables_max_connections{srvDiv="DATABASE"}) * 100) >= 20
+    for: 1m
+    labels:
+      severity: "Warning"
+    annotations:
+      summary: "{{ $labels.alias }} [{{ $labels.instance }}] Connection Usage 80% for 1m"
+      description: "Connection Usage Value: {{ $value }}%"
+      value: "{{ $value }}%"
+
+  - alert: ReplicationDealy
+    expr: mysql_slave_status_seconds_behind_master{srvDiv="DATABASE"} >= 1000
+    for: 1m
+    labels:
+      severity: "Warning"
+    annotations:
+      summary: "{{ $labels.alias }} [{{ $labels.instance }}] Replication Delay"
+      description: "Replication Delay Value : {{ $value }}"
+      value: "{{ $value }}"
+
+  - alert: ReplicationStop
+    expr: mysql_slave_status_slave_io_running == 0 or mysql_slave_status_slave_sql_running == 0
+    for: 1m
+    labels:
+      severity: "Critacal"
+    annotations:
+      summary: "{{ $labels.alias }} [{{ $labels.instance }}] Replication Stop"
+      description: "{{ $labels.alias }} Replication Stop."
+      value: "{{ $value }}"
+
+  - alert: InnoDBLogWaits
+    expr: rate(mysql_global_status_innodb_log_waits[15m]) > 10
+    labels:
+      severity: "Warning"
+    annotations:      
+      summary: "{{ $labels.alias }} [{{ $labels.instance }}] innodb log writes stalling"
+      description: "innodb logs are waiting for disk at a rate of {{ $value }}s"
+      value: "{{ $value }}s"
+
+  # System
+  - alert: HighCpuLoad
+    expr: 100 - (avg by(instance) (irate(node_cpu{mode="idle"}[5m])) * 100) > 80
+    for: 5m
+    labels:
+      severity: "Critical"
+    annotations:
+      summary: "High CPU load 80% < {{ $labels.alias }} [{{ $labels.instance }}]"
+      description: "CPU load Value : {{ $value }}%"
+      value: "{{ $value }}%"
+
+  - alert: SwapMemoryUsage
+    expr: ((node_memory_SwapTotal - node_memory_SwapFree)/node_memory_SwapTotal ) * 100 > 80
+    for: 1m
+    labels:
+      severity: "Warning"
+    annotations:
+      summary: "Swap Memory Usage 80% < {{ $labels.alias }} [{{ $labels.instance }}]"
+      description: "Swap Memory Usage Value: {{ $value }}% "
+      value: "{{ $value }}%"
+
+  - alert: MemoryUsage
+    expr: (node_memory_MemTotal - (node_memory_MemAvailable or (node_memory_MemFree + node_memory_Buffers + node_memory_Cached))) /node_memory_MemTotal * 100 > 85
+    for: 1m
+    labels:
+      severity: "Warning"
+    annotations:
+      summary: "Memory Usage 80% < {{ $labels.alias }} [{{ $labels.instance }}]"
+      description: "Memory Usage Value : {{ $value }}% "
+      value: "{{ $value }}%"
+
+  - alert: DataDiskUsage
+    expr: (node_filesystem_size{fstype!~"rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/data"} - node_filesystem_avail{fstype!="rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/data"}) / node_filesystem_size{fstype!~"rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/data"} * 100 > 85
+    for: 1m
+    labels:
+      severity: "Critical"
+    annotations:
+      summary: "Data Disk Usage 80% < {{ $labels.alias }} [{{ $labels.instance }}]"
+      description: "Data Disk Usage Value : {{ $value }}% "
+      value: "{{ $value }}%"
+
+  - alert: RootDiskUsage
+    expr: (node_filesystem_size{fstype!~"rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/"} - node_filesystem_avail{fstype!="rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/"}) / node_filesystem_size{fstype!~"rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/"} * 100 > 85
+    for: 1m
+    labels:
+      severity: "Critical"
+    annotations:
+      summary: "Root Disk Usage 80% < {{ $labels.alias }} [{{ $labels.instance }}]"
+      description: "Root Disk Usage Value : {{ $value }}% "
+      value: "{{ $value }}%"
+  
+  - alert: LogDiskUsage
+    expr: (node_filesystem_size{fstype!~"rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/log"} - node_filesystem_avail{fstype!="rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/log"}) / node_filesystem_size{fstype!~"rootfs|selinuxfs|autofs|rpc_pipefs|tmpfs", mountpoint="/log"} * 100 > 85
+    for: 1m
+    labels:
+      severity: "Warning"
+    annotations:
+      summary: "Log Disk Usage 80% < {{ $labels.alias }} [{{ $labels.instance }}]"
+      description: "Log Disk Usage Value : {{ $value }}% "
+      value: "{{ $value }}%"

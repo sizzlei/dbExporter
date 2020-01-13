@@ -1,0 +1,29 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: "https://hooks.slack.com/services/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"
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10m
+  repeat_interval: 1h
+  receiver: 'Slack-Alert'
+receivers:
+- name: 'Slack-Alert'
+  slack_configs:
+  - channel: "#api-test"
+    username: "Prometheus"
+    send_resolved: true
+    title: '[{{ .Status | toUpper  }}:{{ .Alerts.Firing | len  }}] {{ .CommonLabels.alertname }}'
+    text: "{{ range .Alerts }}
+            *Database* : {{ .Labels.alias  }}\n
+            *IP* : `{{ .Labels.instance  }}`\n
+            *Summary* : {{ .Annotations.summary }}\n
+            *Value* : {{ .Annotations.value }}\n
+           {{ end }}
+           {{ range .Alerts }}
+             *Detail:*\n
+             {{ range .Labels.SortedPairs }}
+               - *{{ .Name  }}*: `{{ .Value  }}`\n
+             {{ end }}\n
+           {{ end }}"
