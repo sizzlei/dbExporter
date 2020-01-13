@@ -1,0 +1,219 @@
+#!/bin/sh
+#
+#  This is Simple MariaDB / MySQL Monitor tool.
+#  with Prometheus Exporters.
+#  Create Date 2020.01.07
+#  Create By Park.Sang Jea
+#
+
+base=$( cd $(dirname $0) && pwd -P)
+mysql_nm=mysqld_exporter
+node_nm=node_exporter
+
+# Arg1
+case $1 in
+add|ADD)
+    case $2 in 
+    mysql|MYSQL )
+        echo 'mysqld_exporter Configure.'
+        echo -n 'Database User : '
+        read dbuser
+        echo -n 'Database User Password : '
+        read dbpass
+
+        # MySQL Connect Check
+        if [ x$dbuser == x -a x$dbpass == x ]; then
+            echo 'Please Write Database User / Password.'
+        else
+            echo 'Remove mysqld_exporter Config.'
+            rm -f $base/.my.cnf
+            echo '[client]' > $base/.my.cnf
+            echo "user=${dbuser}" >> $base/.my.cnf
+            echo "password=${dbpass}" >> $base/.my.cnf
+
+            echo "mysqld_exporter configure...[OK]"
+            echo 'Note: Database Account Create.'
+            echo "  GRANT SELECT, PROCESS, REPLICATION CLIENT ON *.* TO '${dbuser}'@'::1' identified by '${dbpass}';"
+
+        fi
+        
+        
+    ;;
+    monitor|MONITOR )
+        echo 'ADD Monitoring Target....'
+        echo 'NOTE : Prometheus Enable --web.enable-lifecycle'
+        echo -n 'Monitor Server IP : '
+        read monIP
+        echo -n 'Monitor Server Port(Pormetheus Defulat 9090) : '
+        read monPort
+        echo -n 'Monitor SSH User : '
+        read monUser   
+        echo -n 'Pormetheus Config Path : '
+        read prmConfigPath
+        echo -n 'Group tag(default) : '
+        read grpTag
+        
+        # Default Set
+        if [ x$grpTag == x ]; then 
+            grpTag='default' 
+        fi
+
+        if [ x$monPort == x ]; then 
+            monPort=9090 
+        fi
+
+        # Variables Check
+        if [ x$monIP == x -a x$monPort == x -a x$monUser == x -a x$prmConfigPath == x ]; then
+            echo 'Please Write Monitor Server Information.'
+        else       
+            # Temporary Config Write     
+            jobnm=`hostname`
+            jobip=`ip addr | grep "inet " | grep brd | awk '{print $2}' | awk -F/ '{print $1}'`
+
+            echo -n "Correct this hostname(${jobnm}) : "    
+            read newJob
+
+            if [ x$newJob == x ]; then
+                echo "Check Hostname...[OK]"
+            else
+                jobnm=$newJob    
+            fi
+
+            echo -n "Correct this IP Address(${jobip}) : "
+            read newIP
+
+            if [ x$newIP == x ]; then
+                echo "Check IP Address...[OK]"
+            else
+                jobip=$newIP    
+            fi
+
+            rm -f $base/${jobnm}_mon.cnf
+            echo -e "  - job_name: '${jobnm}-mysql'\n    static_configs:\n    - targets: ['${jobip}:9104']\n      labels:\n       alias: '${jobnm}'\n       group_tag : '${grpTag}'\n       srvDiv : 'DATABASE'\n" > $base/${jobnm}_mon.cnf
+            echo -e "  - job_name: '${jobnm}-node'\n    static_configs:\n    - targets: ['${jobip}:9100']\n      labels:\n       alias: '${jobnm}'\n       group_tag : '${grpTag}'\n       srvDiv : 'SYSTEM'\n" >> $base/${jobnm}_mon.cnf
+
+            # Config Transfer AND Apply
+            echo 'Configure Setup.'
+            scp $base/${jobnm}_mon.cnf ${monUser}@${monIP}:~/.prometheus.yml
+
+            ssh ${monUser}@${monIP} "cat ~/.prometheus.yml >> ${prmConfigPath}"
+            
+            # Monitor Server Config Reload
+            curl -sX POST "http://${monIP}:${monPort}/-/reload"||echo 'Prometheus Config Reload Fail.'
+        fi
+    ;;
+    *)
+        echo 'Not Choice Add Target.'
+        echo 'ex)./dbExporter add [mysql|monitor]'
+    ;;
+    esac
+
+;;
+start|START)
+    # mysqld_exporter pid check
+    if [ -f "$base/$mysql_nm.pid" ];then
+        echo 'mysqld_exporter Already Start...[Warning]'
+        pidof $mysql_nm | awk '{print $0}' > $base/$mysql_nm.pid
+    else
+        if [ -f "$base/.my.cnf" ];then
+            echo -n 'mysqld_exporter Service Start.'
+            nohup $base/mysqld_exporter -config.my-cnf $base/.my.cnf \
+                -collect.binlog_size -collect.engine_innodb_status -collect.auto_increment.columns \
+                -collect.info_schema.tables true -collect.info_schema.innodb_metrics \
+                -collect.info_schema.processlist -collect.info_schema.processlist.min_time 3 \
+                -collect.info_schema.tables.databases * -collect.info_schema.tablestats \
+                -collect.info_schema.userstats -collect.info_schema.clientstats 1> $base/$mysql_nm.log 2>&1 &
+            sleep 2
+            pidof $mysql_nm | awk '{print $0}' > $base/$mysql_nm.pid
+            echo  '.[OK]'
+        else
+            echo 'mysqld_exporter Config Not exists.'
+            echo 'Run dbExporter add mysql'
+        fi
+    fi
+
+    # node_exporter pid check
+    if [ -f "$base/$node_nm.pid" ];then
+        echo 'node_exporter Already Start...[Warning]'
+        pidof $node_nm | awk '{print $0}' > $base/$node_nm.pid
+    else
+        echo -n 'node_exporter Service Start.'
+        nohup $base/node_exporter 1> $base/$node_nm.log 2>&1 &
+        sleep 2
+        pidof $node_nm | awk '{print $0}' > $base/$node_nm.pid
+        echo  '.[OK]'
+    fi
+;;
+stop|STOP)
+    # mysqld_exporter pid check
+    if [ -f "$base/$mysql_nm.pid" ];then
+        echo -n 'mysqld_exporter Service Stop.'
+        kill `cat $base/$mysql_nm.pid|head -1`
+        rm -f $base/$mysql_nm.pid
+        echo  '.[OK]'
+    else
+        echo 'mysqld_exporter Service Already Stop...[Warning]'
+    fi
+    # node_exporter pid check
+    if [ -f "$base/$node_nm.pid" ];then
+        echo -n 'node_exporter Service Stop.'
+        kill `cat $base/$node_nm.pid|head -1`
+        rm -f $base/$node_nm.pid
+        echo  '.[OK]'
+    else
+        echo 'node_exporter Service Already Stop...[Warning]'
+    fi
+;;
+status|STATUS)
+    mysqldPid=`pidof $mysql_nm | awk '{print $0}'`    
+    if [ x$mysqldPid == x ]; then
+        echo 'mysqld_exporter...[Fail]'
+    else
+        echo 'mysqld_exporter...[OK]'
+    fi
+
+    nodePid=`pidof $node_nm | awk '{print $0}'`    
+    if [ x$nodePid == x ]; then
+        echo 'node_exporter...[Fail]'
+    else
+        echo 'node_exporter...[OK]'
+    fi
+;;
+help|HELP)
+    echo ''
+    echo 'Usage: ./dbExporter [Option]'
+    echo ''
+    echo 'Bash profile:'
+    echo 'Note: Account Bash_profile add.'
+    echo "  alias dbExporter='${base}/dbExporter'"
+    echo ''
+    echo 'This is Simple MySQL/MariaDB Monitoring Script with Prometheus Exporter.'
+    echo ''
+    echo 'Version:'
+    echo '  mysqld_exporter 0.10.0'
+    echo '  node_exporter   0.12.0rc3'
+    echo ''
+    echo 'Usage Port:'
+    echo '  Target -> Monitor   9090    Prometheus Port'
+    echo '  Target -> Monitor   22      SSH Port'
+    echo '  Monitor -> Target   9104    mysqld_exporter'
+    echo '  Monitor -> Target   9100    node_exporter'
+    echo ''
+    echo 'Option:'
+    echo '  add|ADD         Make mysqld_exporter Config or Monitor server enrollment.'
+    echo '  start|START     mysqld_exporter and node_exporter Service Start.'
+    echo '  stop|STOP       mysqld_exporter and node_exporter Service Stop.'
+    echo '  status|STATUS   mysqld_exporter and node_exporter Service Status Print.'
+    echo '  help|HELP       This Script Option Print'
+    echo ''
+    echo 'add Options:'
+    echo '  mysql|MYSQL     Make mysqld_exporter Config.'
+    echo '  monitor|MONITOR Monitor server enrollment.'
+    echo ''
+    echo ''
+;;
+*)
+    echo 'arguments not available.'
+    echo 'ex)./dbExporter [add|start|stop|status|help]'
+;;
+esac
