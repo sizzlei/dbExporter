@@ -34,7 +34,7 @@ groups:
       value: "{{ $value }}%"
 
   - alert: ReplicationDealy
-    expr: mysql_slave_status_seconds_behind_master{srvDiv="DATABASE"} >= 1000
+    expr: mysql_slave_status_seconds_behind_master{srvDiv="DATABASE"} >= 10
     for: 1m
     labels:
       severity: "Warning"
