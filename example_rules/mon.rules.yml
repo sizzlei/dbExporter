@@ -44,7 +44,7 @@ groups:
       value: "{{ $value }}"
 
   - alert: ReplicationStop
-    expr: mysql_slave_status_slave_io_running == 0 or mysql_slave_status_slave_sql_running == 0
+    expr: (mysql_slave_status_slave_io_running == 0 or mysql_slave_status_slave_sql_running == 0) and mysql_global_variables_innodb_read_only == 1
     for: 1m
     labels:
       severity: "Critacal"
