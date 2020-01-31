@@ -20,6 +20,19 @@ add|ADD)
         read dbuser
         echo -n 'Database User Password : '
         read dbpass
+        echo -n 'Database Port : (default: 3306)'
+        read dbport
+        echo -n 'Database Socket : (default : /tmp/mysql.sock)'
+        read dbsocket
+        
+        # Default Value Set
+        if [ x$dbport == x ]; then
+            dbport=3306
+        fi
+
+        if [ x$dbsocket == x ]; then
+            dbsocket=/tmp/mysql.sock
+        fi
 
         # MySQL Connect Check
         if [ x$dbuser == x -a x$dbpass == x ]; then
@@ -30,6 +43,8 @@ add|ADD)
             echo '[client]' > $base/.my.cnf
             echo "user=${dbuser}" >> $base/.my.cnf
             echo "password=${dbpass}" >> $base/.my.cnf
+            echo "port=${dbport}" >> $base/.my.cnf
+            echo "socket=${dbsocket}" >> $base/.my.cnf
 
             echo "mysqld_exporter configure...[OK]"
             echo 'Note: Database Account Create.'
